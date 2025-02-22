@@ -8,6 +8,7 @@ const { Server } = require("socket.io");
 // --------------------------------
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const { title } = require('process');
 const uri = `mongodb+srv://${process.env.db_user}:${process.env.db_pass}@cluster0.bfv30pl.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 const PORT = process.env?.PORT || 5000
 
@@ -86,10 +87,13 @@ async function run() {
       const options = { upsert: true };
       const doc = {
         $set: {
-          category: body.category
+          title:body.title,
+          category: body.category,
+          details: body.details,
+          date:body.date
         }
       }
-      const result = await taskCollection.updateOne(find,doc,options)
+      const result = await taskCollection.updateOne(find, doc, options)
       res.send(result)
     })
     app.delete('/tasks/:id', async (req, res) => {
@@ -140,10 +144,11 @@ run().catch(console.dir);
 app.get('/', (req, res) => {
     res.send('server is running properly')
 })
-setInterval(() => {
-  fetch("https://task-drag-nd-drop-server.onrender.com")
-    .then((res) => console.log("Keep-alive ping sent:", res.status))
-    .catch((err) => console.error("Keep-alive ping failed:", err));
-}, 10 * 60 * 1000); 
+
+// setInterval(() => {
+//   fetch("https://task-drag-nd-drop-server.onrender.com")
+//     .then((res) => console.log("Keep-alive ping sent:", res.status))
+//     .catch((err) => console.error("Keep-alive ping failed:", err));
+// }, 10 * 60 * 1000); 
 
 server.listen(PORT,()=>console.log(`server is runnig on ${PORT}`))
