@@ -3,12 +3,13 @@ const express = require('express')
 const cors = require('cors')
 const app = express()
 // --------------------------------
-const http = require("http");
-const { Server } = require("socket.io");
+// const http = require("http");
+// const { Server } = require("socket.io");
 // --------------------------------
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const { title } = require('process');
+
 const uri = `mongodb+srv://${process.env.db_user}:${process.env.db_pass}@cluster0.bfv30pl.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 const PORT = process.env?.PORT || 5000
 
@@ -24,17 +25,17 @@ app.use(express.json())
 
 
 // -------------------------------------------------------------------
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: [
-      "http://localhost:5173",  // Your development client URL
-      "https://drag-nd-drop-task.netlify.app", // Your production URL
-    ],
-    methods: ["GET","POST","DELETE","PUT"], // Add the methods if needed
-    credentials: true, // If you need credentials (cookies, authorization headers)
-  },
-});
+// const server = http.createServer(app);
+// const io = new Server(server, {
+//   cors: {
+//     origin: [
+//       "http://localhost:5173",  // Your development client URL
+//       "https://drag-nd-drop-task.netlify.app", // Your production URL
+//     ],
+//     methods: ["GET","POST","DELETE","PUT"], // Add the methods if needed
+//     credentials: true, // If you need credentials (cookies, authorization headers)
+//   },
+// });
 // ----------------------------------------------------------------------------------
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -70,9 +71,27 @@ async function run() {
     //Task data
       app.post('/tasks', async (req, res) => {
         const body = req.body;
-        console.log(body)
+        // const { uid, title, details, date, userEmail, category } = body;
+        
+        // const findTask =await taskCollection.findOne({ title: title });
+        // console.log(findTask)
+        
+        //   // const lastTask=  findTask.sort("-order")
+        // const order = findTask ? findTask.order + 1 : 0;
+        // console.log(order)
+        //   const taskInfo={
+        //     uid,
+        //     title,
+        //     details,
+        //     date,
+        //     order,
+        //     category,
+        //     userEmail,
+        //    }
         const result = await taskCollection.insertOne(body)
-        res.send(result)
+        return  res.send(result)
+      
+
       })
     app.get('/tasks', async (req, res) => {
       const email = req.query.email;
@@ -85,52 +104,120 @@ async function run() {
       const body = req.body;
       const find = { _id: new ObjectId(id) }
       const options = { upsert: true };
-      const doc = {
+        const doc = {
         $set: {
-          title:body.title,
-          category: body.category,
-          details: body.details,
-          date:body.date
+            category: body.category,
+          }
         }
-      }
-      const result = await taskCollection.updateOne(find, doc, options)
-      res.send(result)
+        const result = await taskCollection.updateOne(find, doc, options)
+       return res.send(result)
+      
     })
+    
+    app.put('/taskUpdate/:id', async (req, res) => {
+      const id = req.params.id;
+      const body = req.body;
+      const find = { _id: new ObjectId(id) }
+      const options = { upsert: true };
+        const doc = {
+          $set: {
+            title:body.title,
+            details: body.details,
+            date:body.date
+          }
+        }
+        const result = await taskCollection.updateOne(find, doc, options)
+        res.send(result)
+      
+    })
+    
     app.delete('/tasks/:id', async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) }
       const result = await taskCollection.deleteOne(filter)
       res.send(result)
     })
+    // ================================================================
+    app.put('/reOrder', async (req, res) => {
+     try {
+    const { taskId, newCategory, oldCategory, newIndex, oldIndex } = req.body;
 
 
+    const task = await taskCollection.findOne({ _id: new ObjectId(taskId) });
 
+    if (!task) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+
+    if (task.category !== newCategory) {
+      await taskCollection.updateMany(
+        { category: oldCategory, order: { $gt: oldIndex } },
+        { $inc: { order: -1 } }
+      );
+
+      await taskCollection.updateMany(
+        { category: newCategory, order: { $gte: newIndex } },
+        { $inc: { order: 1 } }
+      );
+
+      await taskCollection.updateOne(
+        { _id: new ObjectId(taskId) },
+        { $set: { category: newCategory, order: newIndex } }
+      );
+    } else {
+      if (newIndex > oldIndex) {
+        await taskCollection.updateMany(
+          { category: task.category, order: { $gt: oldIndex, $lte: newIndex } },
+          { $inc: { order: -1 } }
+        );
+      } else {
+        await taskCollection.updateMany(
+          { category: task.category, order: { $gte: newIndex, $lt: oldIndex } },
+          { $inc: { order: 1 } }
+        );
+      }
+
+      await taskCollection.updateOne(
+        { _id: new ObjectId(taskId) },
+        { $set: { order: newIndex } }
+      );
+    }
+    task.order = newIndex;
+
+    await task.save();
+    res.status(200).json({ message: "Task position updated" });
+  } catch (error) {
+    res.status(500).json({ message: "Error updating task order", error });
+  }
+    })
+
+// ============================================================================
     // ------------------------------------------------------------------
     // WebSocket Connection
-    io.on("connection", (socket) => {
-      console.log("A user connected:", socket.id);
+    // io.on("connection", (socket) => {
+    //   // console.log("A user connected:", socket.id);
 
-      socket.on("disconnect", () => {
-        console.log("A user disconnected:", socket.id);
-      });
-    });
+    //   socket.on("disconnect", () => {
+    //     console.log("A user disconnected:", socket.id);
+    //   });
+    // });
 
-    // MongoDB Change Streams for Real-Time Updates
-    const changeStream = taskCollection.watch();
-    changeStream.on("change", (change) => {
-      console.log("Change detected:", change);
+    // // MongoDB Change Streams for Real-Time Updates
+    // const changeStream = taskCollection.watch();
+    // changeStream.on("change", (change) => {
+    //   console.log("Change detected:", change);
 
-      if (change.operationType === "insert") {
-        io.emit("taskAdded", change.fullDocument);
-      } else if (change.operationType === "update") {
-        io.emit("taskUpdated", {
-          _id: change.documentKey._id,
-          ...change.updateDescription.updatedFields,
-        });
-      } else if (change.operationType === "delete") {
-        io.emit("taskDeleted", change.documentKey._id);
-      }
-    });
+    //   if (change.operationType === "insert") {
+    //     io.emit("taskAdded", change.fullDocument);
+    //   } else if (change.operationType === "update") {
+    //     io.emit("taskUpdated", {
+    //       _id: change.documentKey._id,
+    //       ...change.updateDescription.updatedFields,
+    //     });
+    //   } else if (change.operationType === "delete") {
+    //     io.emit("taskDeleted", change.documentKey._id);
+    //   }
+    // });
 
     // ------------------------------------------------------------
   } finally {
@@ -145,10 +232,4 @@ app.get('/', (req, res) => {
     res.send('server is running properly')
 })
 
-// setInterval(() => {
-//   fetch("https://task-drag-nd-drop-server.onrender.com")
-//     .then((res) => console.log("Keep-alive ping sent:", res.status))
-//     .catch((err) => console.error("Keep-alive ping failed:", err));
-// }, 10 * 60 * 1000); 
-
-server.listen(PORT,()=>console.log(`server is runnig on ${PORT}`))
+app.listen(PORT,()=>console.log(`server is runnig on ${PORT}`))
